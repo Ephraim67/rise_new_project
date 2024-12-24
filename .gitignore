@@ -1,0 +1,20 @@
+# Byte-compiled files
+*.pyc
+__pycache__/
+
+# Django settings
+.env
+
+# Local database
+db.sqlite3
+
+# Static files
+staticfiles/
+media/
+
+# Logs
+*.log
+
+# IDE files
+.vscode/
+.idea/
