@@ -1,12 +1,16 @@
 from django.shortcuts import render
+from rest_framework.viewsets import ModelViewSet
 from rest_framework.generics import ListAPIView, RetrieveAPIView
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 from rest_framework.response import Response
-from .models import VIPLevel, Product
-from .serializers import VIPLevelSerializer, ProductSerializer
+from .models import VIPLevel, Product, ProductTransactionRecord, RechargeTransactionRecord, WithdrawalTransactionRecord, Recharge, Withdrawal
+from .serializers import VIPLevelSerializer, ProductSerializer, ProductTransactionRecordSerializer, RechargeTransactionRecordSerializer, WithdrawalTransactionRecordSerializer, RechargeSerializer, WithdrawalSerializer
 from decimal import Decimal
+from django.conf import settings
 from uuid import uuid4
+from django_filters.rest_framework import DjangoFilterBackend
 
 # Create your views here.
 
@@ -62,4 +66,72 @@ class SubmitProductView(APIView):
             {"message": "Products submitted successfully.", "total_profit": str(total_profit)},
             status=status.HTTP_201_CREATED,
         )
+    
+class ProductTransactionRecordViewSet(ModelViewSet):
+    queryset = ProductTransactionRecord.objects.all()
+    serializer_class = ProductTransactionRecordSerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['status', 'transaction_time']
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user)
+
+class RechargeView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        amount = request.data.get('amount')
+        try:
+            amount = Decimal(amount)
+            if amount <= 0:
+                return Response({'error': 'Amount must be greater than zero.'}, status=400)
+        except(ValueError, TypeError):
+            return Response({'error': 'Invalid amount provided.'}, status=400)
+        
+        # Create a pending deposit record
+        recharge = Recharge.objects.create(
+            user=request.user,
+            amount=amount,
+            status='pending',
+        )
+
+        # Create a pending transaction record
+        RechargeTransactionRecord.objects.create(
+            user=request.user,
+            recharge=recharge,
+            amount=amount,
+            status='pending',
+        )
+
+        # Admin contact links
+        telegram_link = f"https://t.me/{settings.TELEGRAM_ADMIN_USERNAME}"
+        whatsapp_link = f"https://wa.me/{settings.WHATSAPP_ADMIN_PHONE_NUMBER}?text=Hello,%20I%20would%20like%20to%20proceed%20with%20my%20deposit%20of%20{amount}."
+
+        return Response(
+            {
+                'message': 'Deposit request received. Please proceed with the payment.',
+                'recharge_id': recharge.id,
+                'status': recharge.status,
+                'telegram_link': telegram_link,
+                'whatsapp_link': whatsapp_link,
+            },
+            status=201,
+        )
+
+class RechargeTransactionRecordViewSet(ModelViewSet):
+    queryset = RechargeTransactionRecord.objects.all()
+    serializer_class = RechargeTransactionRecordSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user)
+
+class WithdrawalTransactionRecordViewSet(ModelViewSet):
+    queryset = WithdrawalTransactionRecord.objects.all()
+    serializer_class = WithdrawalTransactionRecordSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user)
 

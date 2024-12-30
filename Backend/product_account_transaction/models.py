@@ -3,6 +3,7 @@ from django.core.validators import MinValueValidator
 from decimal import Decimal
 from django.utils import timezone
 from users.models import Register
+from uuid import uuid4
 
 
 class VIPLevel(models.Model):
@@ -248,6 +249,7 @@ class Balance(models.Model):
 
 class Recharge(models.Model):
     """Handles deposits made by users."""
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
     user = models.ForeignKey(Register, on_delete=models.CASCADE, related_name='deposits')
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     status = models.CharField(max_length=20, choices=[('pending', 'Pending'), ('completed', 'Completed')], default='pending')

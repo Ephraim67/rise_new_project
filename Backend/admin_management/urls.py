@@ -8,6 +8,7 @@ from .views import (
     AdminUserSearchView,
     AdvancedUserFilterView,
     AdminUserManagementView,
+    AdminDepositeManagementView
 
 )
 
@@ -37,5 +38,8 @@ urlpatterns = [
     path('users/create', AdminUserManagementView.as_view(), name='admin-user-create'),
 
     # Frozen user account
-    path('users/<int:user_id>/freeze/', AdminUserManagementView.as_view(), name='admin-user-freeze')
+    path('users/<int:user_id>/freeze/', AdminUserManagementView.as_view(), name='admin-user-freeze'),
+
+    # Deposite management
+    path('deposite/', AdminDepositeManagementView.as_view(), name='admin-deposite'),
 ]

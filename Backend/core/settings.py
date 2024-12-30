@@ -125,6 +125,9 @@ TEMPLATES = [
     },
 ]
 
+TELEGRAM_ADMIN_USERNAME = "UpgrowDigitalCS2"
+WHATSAPP_ADMIN_PHONE_NUMBER = "447403079332" 
+
 WSGI_APPLICATION = 'core.wsgi.application'
 
 

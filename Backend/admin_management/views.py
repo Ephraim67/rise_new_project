@@ -1,3 +1,4 @@
+import pytz
 from django.shortcuts import render
 from rest_framework.response import Response
 from rest_framework import generics, permissions, status
@@ -8,11 +9,12 @@ from django.contrib.auth import authenticate
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.models import User
 from datetime import datetime
-import pytz
-from rest_framework.permissions import AllowAny
-
-from .models import AdminAuditLog
+from rest_framework.permissions import AllowAny, IsAdminUser
+from django.utils.timezone import now as timezone_now
+from .models import AdminAuditLog, SoftDeleteUser
+from product_account_transaction.models import Recharge, ProductTransactionRecord
 from .serializers import AdminUserSerializer, AdminLoginSerializer
+from product_account_transaction.serializers import RechargeSerializer
 from .permissions import IsAdminUserOrSuperuser
 from users.serializers import RegisterSerializer
 
@@ -265,3 +267,94 @@ class AdminUserManagementView(APIView):
             return Response({
                 'error': 'User not found'
             }, status=status.HTTP_404_NOT_FOUND)
+        
+
+class AdminDepositeManagementView(APIView):
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        """
+        Fetch all deposite with optional filtering by status.
+        Example: /admin/deposites/?status=pending
+        """
+        status = request.query_params.get('status')
+        deposits = Recharge.objects.all()
+        if status:
+            deposits = deposits.filter(status=status)
+
+        serializer = RechargeSerializer(deposits, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+    def post(self, request):
+        """
+        Approve a pending deposit or deposit directly to user account
+        """
+        action = request.data.get('action') # 'approve' or 'deposit'
+        if action == 'approve':
+            deposit_id = request.data.get('deposit_id')
+            return self.approve_deposit(deposit_id)
+        elif action == 'direct_deposit':
+            user_id = request.data.get('user_id')
+            amount = request.data.get('amount')
+            return self.direct_deposit(user_id, amount)
+        else:
+            return Response({'error': 'Invalid action'}, status=status.HTTP_400_BAD_REQUEST)
+        
+    def approve_deposit(self, deposit_id):
+        try:
+            deposit = Recharge.objects.get(id=deposit_id, status='pending')
+            user = deposit.user
+
+
+            # Update user balance
+            user.balance.balance += deposit.amount
+            user.balance.save()
+
+            # Update deposit status
+            deposit.status = 'completed'
+            deposit.completed_at = timezone_now()
+            deposit.save()
+
+            # Update transaction records to completed
+            transaction_records = deposit.transaction_records.first()
+            if transaction_records:
+                transaction_records.status = 'completed'
+                transaction_records.transaction_time = timezone_now()
+                transaction_records.save()
+
+            return Response({'message': 'Deposit approved successfully'}, status=status.HTTP_200_OK)
+        except Recharge.DoesNotExist:
+            return Response({'error': 'Deposit not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+    def direct_deposit(self, user_id, amount):
+        try:
+            user = User.objects.get(id=user_id)
+            if float(amount) <= 0:
+                return Response({'error': 'Amount must be greater than zero'}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Update user balance
+            user.balance.balance += float(amount)
+            user.balance.save()
+
+            # Create a successful recharge and transaction record
+            deposit = Recharge.object.create(
+                user=user,
+                amount=amount,
+                status='completed',
+                completed_at = timezone_now()
+            )
+
+            ProductTransactionRecord.objects.create(
+                user=user,
+                recharge=deposit,
+                status='completed',
+                transaction_time = timezone_now()
+            )
+
+            return Response({'message': 'Deposit successful'}, status=status.HTTP_200_OK)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
+
+        
